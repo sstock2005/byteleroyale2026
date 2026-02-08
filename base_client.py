@@ -75,6 +75,88 @@ def backup_panic_movemvent(current_position: Vector, bot: Vector, world: GameBoa
     # print("no panic action!")
     return None
 
+import heapq
+from typing import Dict, List, Tuple, Optional
+from game.common.enums import ActionType, ObjectType
+from game.common.game_object import GameObject
+from game.common.map.occupiable import Occupiable
+from game.constants import DIRECTION_TO_MOVE
+from game.utils.vector import Vector
+
+Position = Tuple[int, int]
+
+DIRECTIONS = [(1,0), (-1,0), (0,1), (0,-1)]
+
+
+def a_star_move(start: Vector, goal: Vector, world, allow_vents: bool = True, game_object: GameObject | None = None) -> ActionType | None:
+    path = a_star_path(
+        start=start,
+        goal=goal,
+        world=world,
+        allow_vents=allow_vents,
+        game_object=game_object
+    )
+
+    if not path or len(path) < 2:
+        return None
+
+    next_step: Vector = path[1]
+    direction = next_step - start
+    action = DIRECTION_TO_MOVE.get(direction)
+    return action
+
+def a_star_path(start: Vector, goal: Vector, world, allow_vents = True, game_object: GameObject | None = None) -> Optional[List[Vector]]:
+    start_p = (start.x, start.y)
+    goal_p = (goal.x, goal.y)
+
+    frontier = [(0, start_p)]
+    came_from = {start_p: None}
+    cost = {start_p: 0}
+
+    while frontier:
+        _, current = heapq.heappop(frontier)
+
+        if current == goal_p:
+            path = []
+            while current is not None:
+                x, y = current
+                path.insert(0, Vector(x, y))
+                current = came_from[current]
+            return path
+
+        for dx, dy in DIRECTIONS:
+            nxt = (current[0] + dx, current[1] + dy)
+            vec = Vector(nxt[0], nxt[1])
+
+            if game_object is not None and not world.can_object_occupy(vec, game_object):
+                continue
+
+            if not world.is_valid_coords(vec):
+                continue
+
+            top = world.get_top(vec)
+            if top and top.object_type != ObjectType.AVATAR:
+                # walls block
+                if top.object_type == ObjectType.WALL:
+                    continue
+
+                # vents block unless allowed
+                if top.object_type == ObjectType.VENT and not allow_vents:
+                    continue
+
+                # can't pass through non-occupiable
+                if not isinstance(top, Occupiable):
+                    continue
+
+            new_cost = cost[current] + 1
+            if nxt not in cost or new_cost < cost[nxt]:
+                cost[nxt] = new_cost
+                priority = new_cost + vec.distance(goal)
+                heapq.heappush(frontier, (priority, nxt))
+                came_from[nxt] = current
+
+    return None
+
 def determine_movement(current_position: Vector, goal_position: Vector, world: GameBoard, my_avatar: Avatar, dumb_bot: Vector, doe_bot: Vector, crawler_bot: Vector) -> ActionType | None:
     """Helper method to determine the next movement action based on current position and goal position."""
     
@@ -104,27 +186,7 @@ def determine_movement(current_position: Vector, goal_position: Vector, world: G
             else:
                 return None
 
-    if current_position.y > goal_position.y:
-        # need to move up
-        new_position = Vector(current_position.x, current_position.y - 1)
-        if world.can_object_occupy(new_position, my_avatar):
-            return ActionType.MOVE_UP
-    if current_position.y < goal_position.y:
-        # need to move down
-        new_position = Vector(current_position.x, current_position.y + 1)
-        if world.can_object_occupy(new_position, my_avatar):
-            return ActionType.MOVE_DOWN
-    if current_position.x < goal_position.x:
-        # need to move right
-        new_position = Vector(current_position.x + 1, current_position.y)
-        if world.can_object_occupy(new_position, my_avatar):
-            return ActionType.MOVE_RIGHT
-    if current_position.x > goal_position.x:
-        # need to move left
-        new_position = Vector(current_position.x - 1, current_position.y)
-        if world.can_object_occupy(new_position, my_avatar):
-            return ActionType.MOVE_LEFT
-    return None
+    return a_star_move(current_position, goal_position, world, True, my_avatar)
 
 def object_in_inventory(object: ObjectType, avatar: Avatar) -> bool:
     for i in avatar.inventory:
@@ -165,10 +227,10 @@ class Client(UserClient):
         coin_2_position = Vector(12, 2)
         scrap_2_position = Vector(17, 4)
         battery_1_position = Vector(16, 1)
-        gen_2_position = Vector(28, 18)
+        gen_2_position = Vector(29, 18)
         coin_3_position = Vector(34, 17)
         battery_2_position = Vector(36, 6)
-        coin_4_position = Vector(31, 7)
+        coin_4_position = Vector(32, 7)
         scrap_3_position = Vector(32, 4)
         gen_3_position = Vector(35, 2)
         dumb_bot_position = list(world.get_objects(ObjectType.DUMB_BOT).keys())[0]
@@ -189,6 +251,7 @@ class Client(UserClient):
                 return [movement_action]
             else:
                 SCRAP_1_DONE = True
+                GEN_1_DONE = False
 
         # activate first generator and grab another scrap
         if GEN_1_DONE == False:
@@ -204,6 +267,7 @@ class Client(UserClient):
                 return [movement_action]
             else:
                 GEN_1_DONE = True
+                print("got gen")
                 SCRAP_1_DONE = False # grab scrap again
                 return [ActionType.INTERACT_LEFT]
 
@@ -313,6 +377,21 @@ class Client(UserClient):
             else:
                 BATTERY_1_DONE_AGAIN = True
                 SCRAP_2_DONE = False
+                
+        # get coin 4
+        if COIN_4_DONE == False:
+            movement_action = determine_movement(
+                current_position,
+                coin_4_position,
+                world,
+                avatar,
+                dumb_bot_position,
+                doe_bot_position,
+                crawler_bot_position)
+            if movement_action is not None:
+                return [movement_action]
+            else:
+                COIN_4_DONE = True
 
         # activate 2nd gen
         if GEN_2_DONE == False:
@@ -359,21 +438,6 @@ class Client(UserClient):
                 return [movement_action]
             else:
                 BATTERY_2_DONE = True
-
-        # get coin 4
-        if COIN_4_DONE == False:
-            movement_action = determine_movement(
-                current_position,
-                coin_4_position,
-                world,
-                avatar,
-                dumb_bot_position,
-                doe_bot_position,
-                crawler_bot_position)
-            if movement_action is not None:
-                return [movement_action]
-            else:
-                COIN_4_DONE = True
 
         # get scrap 3
         if SCRAP_3_DONE == False:
