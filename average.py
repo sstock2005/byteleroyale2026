@@ -2,9 +2,10 @@ import subprocess
 
 successful_runs = 0
 total = 0
-for _ in range(0, 50):
+for _ in range(0, 6):
     success = bool("0xSUCCESSx0" in subprocess.check_output(["python3", "launcher.pyz", "gr"]).decode())
     total += 1
+    print('end of run ', total)
     if success:
         successful_runs += 1
     

@@ -7,6 +7,8 @@ from game.common.enums import ActionType, ObjectType
 from game.common.map.occupiable import Occupiable
 from game.constants import DIRECTION_TO_MOVE
 from game.utils.vector import Vector
+from game.common.game_object import ObjectType
+from game.fnaacm.stations.generator import Generator
 
 from math import dist
 
@@ -16,15 +18,18 @@ COIN_1_DONE = False
 COIN_2_DONE = False
 SCRAP_2_DONE = False
 BATTERY_1_DONE = False
-COIN_1_DONE_AGAIN = False
-COIN_2_DONE_AGAIN = False
+COIN_1_DONE_AGAIN = True
+COIN_2_DONE_AGAIN = True
 BATTERY_1_DONE_AGAIN = False
-GEN_2_DONE = False
-COIN_3_DONE = False
+GO_down_to_Vent = False
+GO_UP_Through_Crawler = False
+COIN_3_DONE = True
 BATTERY_2_DONE = False
-COIN_4_DONE = False
+COIN_4_DONE = True
 SCRAP_3_DONE = False
 GEN_3_DONE = False
+Doe_Dangerous = False
+attempt_travel = True
 
 def get_closest_goal(u: Vector, l):
     """Helper method to determine the closest goal given a vector and a list of goal vectors"""
@@ -49,6 +54,8 @@ def invert_movement(movement_action: ActionType) -> ActionType | None:
             return ActionType.MOVE_LEFT
         case _:
             return None
+
+
 
 def backup_panic_movemvent(current_position: Vector, bot: Vector, world: GameBoard, my_avatar: Avatar) -> ActionType | None:
     if current_position.y < bot.y:
@@ -133,6 +140,18 @@ def object_in_inventory(object: ObjectType, avatar: Avatar) -> bool:
                 return True
     return False
 
+
+def is_Doe_dangerous_crawler(doe_position: Vector):
+    return False
+    # if (doe_position.x > 21 & doe_position.y > 12):
+    #     print(True)
+    #     return True
+    # else:
+    #     print(False)
+    #     return False
+    
+    
+
 class Client(UserClient):
 
     def __init__(self):
@@ -147,8 +166,8 @@ class Client(UserClient):
 
     def take_turn(self, turn: int, world: GameBoard, avatar: Avatar) -> list[ActionType]:
         global SCRAP_1_DONE, GEN_1_DONE, COIN_1_DONE, COIN_2_DONE, SCRAP_2_DONE, BATTERY_1_DONE, \
-        COIN_1_DONE_AGAIN, COIN_2_DONE_AGAIN, BATTERY_1_DONE_AGAIN, GEN_2_DONE, COIN_3_DONE, \
-        BATTERY_2_DONE, COIN_4_DONE, GEN_3_DONE, SCRAP_3_DONE
+        COIN_1_DONE_AGAIN, COIN_2_DONE_AGAIN, BATTERY_1_DONE_AGAIN, GO_down_to_Vent, COIN_3_DONE, \
+        BATTERY_2_DONE, COIN_4_DONE, GEN_3_DONE, SCRAP_3_DONE, attempt_travel
 
         """
         This is where your AI will decide what to do.
@@ -165,9 +184,10 @@ class Client(UserClient):
         coin_2_position = Vector(12, 2)
         scrap_2_position = Vector(17, 4)
         battery_1_position = Vector(16, 1)
-        gen_2_position = Vector(28, 18)
+        down_vent_position = Vector(28, 18)
+        crawler_hall_position = Vector(21,2)
         coin_3_position = Vector(34, 17)
-        battery_2_position = Vector(36, 6)
+        battery_2_position = Vector(36, 16)
         coin_4_position = Vector(31, 7)
         scrap_3_position = Vector(32, 4)
         gen_3_position = Vector(35, 2)
@@ -175,6 +195,8 @@ class Client(UserClient):
         doe_bot_position = list(world.get_objects(ObjectType.JUMPER_BOT).keys())[0]
         crawler_bot_position = list(world.get_objects(ObjectType.CRAWLER_BOT).keys())[0]
 
+
+      
         # grab first scrap
         if SCRAP_1_DONE == False:
             movement_action = determine_movement(
@@ -191,6 +213,7 @@ class Client(UserClient):
                 SCRAP_1_DONE = True
 
         # activate first generator and grab another scrap
+        print(GEN_1_DONE)
         if GEN_1_DONE == False:
             movement_action = determine_movement(
                 current_position,
@@ -312,23 +335,43 @@ class Client(UserClient):
                 return [movement_action]
             else:
                 BATTERY_1_DONE_AGAIN = True
-                SCRAP_2_DONE = False
+                attempt_travel = False
 
-        # activate 2nd gen
-        if GEN_2_DONE == False:
-            movement_action = determine_movement(
-                current_position,
-                gen_2_position,
-                world,
-                avatar,
-                dumb_bot_position,
-                doe_bot_position,
-                crawler_bot_position)
-            if movement_action is not None:
-                return [movement_action]
+        # decide if to go down to hall or up to crawler
+        if attempt_travel == True:
+            #if doe is near crawler go down
+            if is_Doe_dangerous_crawler(doe_bot_position) == True:
+                movement_action = determine_movement(
+                            current_position,
+                            down_vent_position,
+                            world,
+                            avatar,
+                            dumb_bot_position,
+                            doe_bot_position,
+                            crawler_bot_position)
+                if movement_action is not None:
+                    return [movement_action]
+                else:
+                    COIN_3_DONE= False
+                    attempt_travel = False
+            #if doe is not near crawler go up
             else:
-                GEN_2_DONE = True
-                return [ActionType.INTERACT_RIGHT]
+                movement_action = determine_movement(
+                    current_position,
+                    crawler_hall_position,
+                    world,
+                    avatar,
+                    dumb_bot_position,
+                    doe_bot_position,
+                    crawler_bot_position)
+                if movement_action is not None:
+                    return [movement_action]
+                else:
+                    COIN_4_DONE = False
+                    attempt_travel = False
+
+                    
+
 
         # collection coin 3
         if COIN_3_DONE == False:
@@ -345,20 +388,21 @@ class Client(UserClient):
             else:
                 COIN_3_DONE = True
 
-        # get battery 2
-        if BATTERY_2_DONE == False:
-            movement_action = determine_movement(
-                current_position,
-                battery_2_position,
-                world,
-                avatar,
-                dumb_bot_position,
-                doe_bot_position,
-                crawler_bot_position)
-            if movement_action is not None:
-                return [movement_action]
-            else:
-                BATTERY_2_DONE = True
+        # # get battery 2
+        # if BATTERY_2_DONE == False:
+        #     movement_action = determine_movement(
+        #         current_position,
+        #         battery_2_position,
+        #         world,
+        #         avatar,
+        #         dumb_bot_position,
+        #         doe_bot_position,
+        #         crawler_bot_position)
+        #     if movement_action is not None:
+        #         return [movement_action]
+        #     else:
+        #         BATTERY_2_DONE = True
+        #         COIN_3_DONE = False
 
         # get coin 4
         if COIN_4_DONE == False:
@@ -375,34 +419,34 @@ class Client(UserClient):
             else:
                 COIN_4_DONE = True
 
-        # get scrap 3
-        if SCRAP_3_DONE == False:
-            movement_action = determine_movement(
-                current_position,
-                scrap_3_position,
-                world,
-                avatar,
-                dumb_bot_position,
-                doe_bot_position,
-                crawler_bot_position)
-            if movement_action is not None:
-                return [movement_action]
-            else:
-                COIN_3_DONE = True
+        # # get scrap 3
+        # if SCRAP_3_DONE == False:
+        #     movement_action = determine_movement(
+        #         current_position,
+        #         scrap_3_position,
+        #         world,
+        #         avatar,
+        #         dumb_bot_position,
+        #         doe_bot_position,
+        #         crawler_bot_position)
+        #     if movement_action is not None:
+        #         return [movement_action]
+        #     else:
+        #         COIN_3_DONE = True
 
-        # activate gen 3
-        if GEN_3_DONE == False:
-            movement_action = determine_movement(
-                current_position,
-                gen_3_position,
-                world,
-                avatar,
-                dumb_bot_position,
-                doe_bot_position,
-                crawler_bot_position)
-            if movement_action is not None:
-                return [movement_action]
-            else:
-                GEN_3_DONE = True
-                return [ActionType.INTERACT_UP]
+        # # activate gen 3
+        # if GEN_3_DONE == False:
+        #     movement_action = determine_movement(
+        #         current_position,
+        #         gen_3_position,
+        #         world,
+        #         avatar,
+        #         dumb_bot_position,
+        #         doe_bot_position,
+        #         crawler_bot_position)``
+        #     if movement_action is not None:
+        #         return [movement_action]
+        #     else:
+        #         GEN_3_DONE = True
+        #         return [ActionType.INTERACT_UP]
         return []
