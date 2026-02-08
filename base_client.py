@@ -163,28 +163,6 @@ def determine_movement(current_position: Vector, goal_position: Vector, world: G
     # print(f"Distance from Dumb Bot: {current_position.distance(dumb_bot)}")
     # print(f"Distance from Doe Bot: {current_position.distance(doe_bot)}")
     # print(f"Distance from Crawler Bot: {current_position.distance(crawler_bot)}")
-    
-    if my_avatar.health < 2:
-        if current_position.distance(dumb_bot) < 3:
-            panic_movement = backup_panic_movemvent(current_position, dumb_bot, world, my_avatar)
-            if panic_movement is not None:
-                return panic_movement
-            else:
-                return None
-
-        if current_position.distance(doe_bot) < 3:
-            panic_movement = backup_panic_movemvent(current_position, doe_bot, world, my_avatar)
-            if panic_movement is not None:
-                return panic_movement
-            else:
-                return None
-
-        if current_position.distance(crawler_bot) < 3:
-            panic_movement = backup_panic_movemvent(current_position, crawler_bot, world, my_avatar)
-            if panic_movement is not None:
-                return panic_movement
-            else:
-                return None
 
     return a_star_move(current_position, goal_position, world, True, my_avatar)
 
@@ -208,7 +186,7 @@ class Client(UserClient):
         return "eroorororor"
 
     def take_turn(self, turn: int, world: GameBoard, avatar: Avatar) -> list[ActionType]:
-        global SCRAP_1_DONE, GEN_1_DONE, COIN_1_DONE, COIN_2_DONE, SCRAP_2_DONE, BATTERY_1_DONE, \
+        global SCRAP_1_DONE, COIN_1_DONE, COIN_2_DONE, SCRAP_2_DONE, BATTERY_1_DONE, \
         COIN_1_DONE_AGAIN, COIN_2_DONE_AGAIN, BATTERY_1_DONE_AGAIN, GEN_2_DONE, COIN_3_DONE, \
         BATTERY_2_DONE, COIN_4_DONE, GEN_3_DONE, SCRAP_3_DONE
 
@@ -251,25 +229,7 @@ class Client(UserClient):
                 return [movement_action]
             else:
                 SCRAP_1_DONE = True
-                GEN_1_DONE = False
 
-        # activate first generator and grab another scrap
-        if GEN_1_DONE == False:
-            movement_action = determine_movement(
-                current_position,
-                gen_1_position,
-                world,
-                avatar,
-                dumb_bot_position,
-                doe_bot_position,
-                crawler_bot_position)
-            if movement_action is not None:
-                return [movement_action]
-            else:
-                GEN_1_DONE = True
-                print("got gen")
-                SCRAP_1_DONE = False # grab scrap again
-                return [ActionType.INTERACT_LEFT]
 
         # grab 1st coin and grab another scrap
         if COIN_1_DONE == False:
@@ -378,6 +338,13 @@ class Client(UserClient):
                 BATTERY_1_DONE_AGAIN = True
                 SCRAP_2_DONE = False
                 
+        if doe_bot_position.y < 12 and BATTERY_1_DONE_AGAIN and COIN_4_DONE is False:
+            movement_action = determine_movement(current_position, Vector(22, 4), world, avatar, dumb_bot_position, doe_bot_position, crawler_bot_position)
+            if movement_action is not None:
+                return [movement_action]
+            else:
+                return []
+            
         # get coin 4
         if COIN_4_DONE == False:
             movement_action = determine_movement(
@@ -438,35 +405,4 @@ class Client(UserClient):
                 return [movement_action]
             else:
                 BATTERY_2_DONE = True
-
-        # get scrap 3
-        if SCRAP_3_DONE == False:
-            movement_action = determine_movement(
-                current_position,
-                scrap_3_position,
-                world,
-                avatar,
-                dumb_bot_position,
-                doe_bot_position,
-                crawler_bot_position)
-            if movement_action is not None:
-                return [movement_action]
-            else:
-                COIN_3_DONE = True
-
-        # activate gen 3
-        if GEN_3_DONE == False:
-            movement_action = determine_movement(
-                current_position,
-                gen_3_position,
-                world,
-                avatar,
-                dumb_bot_position,
-                doe_bot_position,
-                crawler_bot_position)
-            if movement_action is not None:
-                return [movement_action]
-            else:
-                GEN_3_DONE = True
-                return [ActionType.INTERACT_UP]
         return []
